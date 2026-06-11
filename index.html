@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAJARE Electronics</title>
+<style>
+body{margin:0;font-family:Arial;background:#06111f;color:white}
+header{text-align:center;background:#0b1d35;padding:16px}
+h1{margin:0;color:#00e5ff;font-size:24px}
+.sub{color:#7cffc4;font-size:13px}
+.status{text-align:center;color:#ffd54f;padding:10px;font-weight:bold}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:12px}
+.card{background:#102642;border-radius:16px;padding:12px}
+.device{display:flex;justify-content:space-between;align-items:center;background:#07192d;margin:8px 0;padding:10px;border-radius:12px}
+button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold;cursor:pointer}
+.on{background:#00c853}.off{background:#d50000}.blue{background:#2962ff}
+.master{text-align:center;padding:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>HAJARE ELECTRONICS SYSTEM</h1>
+<div class="sub">ESP32 16 Relay Local Dashboard</div>
+</header>
+<div class="status" id="sys">Loading...</div>
+<div class="master">
+<button class="blue" onclick="allRelay('ON')">ALL ON</button>
+<button class="blue" onclick="allRelay('OFF')">ALL OFF</button>
+</div>
+<div class="grid">
+<div class="card"><h2>Living Room</h2><div id="living"></div></div>
+<div class="card"><h2>Kitchen</h2><div id="kitchen"></div></div>
+<div class="card"><h2>Bathroom / Spare</h2><div id="bath"></div></div>
+<div class="card"><h2>Future</h2><p>Camera View: Coming Soon</p><p>LCD Display: Enabled</p></div>
+</div>
+
+<script>
+const ESP_IP = "192.168.1.50";
+
+const names=[
+"Living Fan 80W","LED Bulb 1","Decorative Lamp 1","Decorative Lamp 2","Balcony 1 Light","TV","Robot Charger",
+"Kitchen Fan 60W","Fridge","Mandir Light","Kitchen Light","Balcony Dry Lamp",
+"Bathroom Lamp","Geyser","Exhaust Fan","Spare Relay 16"
+];
+
+let states={};
+
+function box(i){
+ let div=document.createElement("div");
+ div.className="device";
+ div.innerHTML=`<span>${i+1}. ${names[i]} <b id="s${i}">OFF</b></span>
+ <button id="b${i}" class="off" onclick="toggle(${i})">OFF</button>`;
+ return div;
+}
+
+function build(){
+ for(let i=0;i<7;i++) living.appendChild(box(i));
+ for(let i=7;i<12;i++) kitchen.appendChild(box(i));
+ for(let i=12;i<16;i++) bath.appendChild(box(i));
+ refresh();
+ setInterval(refresh,3000);
+}
+
+function setUI(i,state){
+ states[i]=state;
+ document.getElementById("s"+i).innerText=state;
+ let b=document.getElementById("b"+i);
+ b.innerText=state;
+ b.className=state=="ON"?"on":"off";
+}
+
+function toggle(i){
+ let next=states[i]=="ON"?"OFF":"ON";
+ fetch(`http://${ESP_IP}/relay?ch=${i}&state=${next}`)
+   .then(()=>setUI(i,next))
+   .catch(()=>alert("ESP32 local IP connect nahi hua"));
+}
+
+function allRelay(cmd){
+ for(let i=0;i<16;i++){
+   fetch(`http://${ESP_IP}/relay?ch=${i}&state=${cmd}`);
+   setUI(i,cmd);
+ }
+}
+
+function refresh(){
+ fetch(`http://${ESP_IP}/status`)
+  .then(r=>r.json())
+  .then(j=>{
+   for(let i=0;i<16;i++) setUI(i,j[i]);
+   sys.innerText="WiFi: CONNECTED | MQTT: ACTIVE | IP: "+ESP_IP;
+  })
+  .catch(()=>{
+   sys.innerText="ESP32 Offline / IP Not Reachable";
+  });
+}
+
+build();
+</script>
+</body>
+</html>
