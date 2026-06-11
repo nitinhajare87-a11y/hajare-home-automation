@@ -3,6 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HAJARE Electronics</title>
+ <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <style>
 body{margin:0;font-family:Arial;background:#06111f;color:white}
 header{text-align:center;background:#0b1d35;padding:16px}
@@ -35,6 +36,49 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 </div>
 
 <script>
+
+ const MQTT_HOST = "wss://431f345fb6a84bfa856a4d34568a46aa.s1.eu.hivemq.cloud:8884/mqtt";
+const MQTT_USER = "nhajare1987";
+const MQTT_PASS = "YOUR_HIVEMQ_PASSWORD";
+
+const topics = [
+"home/living/fan80w",
+"home/living/ledbulb1",
+"home/living/decorative1",
+"home/living/decorative2",
+"home/living/balcony1_light",
+"home/living/tv",
+"home/living/robot_charge",
+"home/kitchen/fan60w",
+"home/kitchen/fridge",
+"home/kitchen/mandir_light1",
+"home/kitchen/kitchen_light",
+"home/kitchen/balcony_dry_lamp",
+"home/bathroom/lamp1",
+"home/bathroom/geyser",
+"home/bathroom/exhaust_fan",
+"home/spare/relay16"
+];
+
+const client = mqtt.connect(MQTT_HOST, {
+  username: MQTT_USER,
+  password: MQTT_PASS,
+  clientId: "HAJARE_WEB_" + Math.random().toString(16).substr(2,8),
+  clean: true,
+  reconnectPeriod: 3000
+});
+
+client.on("connect", () => {
+  sys.innerText = "MQTT: CONNECTED";
+  topics.forEach(t => client.subscribe(t + "/status"));
+});
+
+client.on("message", (topic, message) => {
+  let msg = message.toString().trim().toUpperCase();
+  let base = topic.replace("/status", "");
+  let i = topics.indexOf(base);
+  if (i >= 0) setUI(i, msg);
+});
 const ESP_IP = "192.168.1.50";
 
 const names=[
@@ -53,6 +97,12 @@ function box(i){
  return div;
 }
 
+function allRelay(cmd){
+ for(let i=0;i<16;i++){
+   client.publish(topics[i] + "/set", cmd, {retain:true});
+ }
+}
+ 
 function build(){
  for(let i=0;i<7;i++) living.appendChild(box(i));
  for(let i=7;i<12;i++) kitchen.appendChild(box(i));
@@ -71,7 +121,7 @@ function setUI(i,state){
 
 function toggle(i){
  let next=states[i]=="ON"?"OFF":"ON";
- fetch(`http://${ESP_IP}/relay?ch=${i}&state=${next}`)
+ client.publish(topics[i] + "/set", next, {retain:true});
    .then(()=>setUI(i,next))
    .catch(()=>alert("ESP32 local IP connect nahi hua"));
 }
@@ -82,7 +132,10 @@ function allRelay(cmd){
    setUI(i,cmd);
  }
 }
-
+function toggle(i){
+ let next=states[i]=="ON"?"OFF":"ON";
+ client.publish(topics[i] + "/set", next, {retain:true});
+}
 function refresh(){
  fetch(`http://${ESP_IP}/status`)
   .then(r=>r.json())
