@@ -2,8 +2,10 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HAJARE Electronics</title>
- <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<title>HAJARE Electronics Global Dashboard</title>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
 <style>
 body{margin:0;font-family:Arial;background:#06111f;color:white}
 header{text-align:center;background:#0b1d35;padding:16px}
@@ -14,30 +16,36 @@ h1{margin:0;color:#00e5ff;font-size:24px}
 .card{background:#102642;border-radius:16px;padding:12px}
 .device{display:flex;justify-content:space-between;align-items:center;background:#07192d;margin:8px 0;padding:10px;border-radius:12px}
 button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold;cursor:pointer}
-.on{background:#00c853}.off{background:#d50000}.blue{background:#2962ff}
+.on{background:#00c853}
+.off{background:#d50000}
+.blue{background:#2962ff}
 .master{text-align:center;padding:12px}
 </style>
 </head>
+
 <body>
+
 <header>
 <h1>HAJARE ELECTRONICS SYSTEM</h1>
-<div class="sub">ESP32 16 Relay Local Dashboard</div>
+<div class="sub">ESP32 16 Relay Global MQTT Dashboard</div>
 </header>
-<div class="status" id="sys">Loading...</div>
+
+<div class="status" id="sys">MQTT: Connecting...</div>
+
 <div class="master">
 <button class="blue" onclick="allRelay('ON')">ALL ON</button>
 <button class="blue" onclick="allRelay('OFF')">ALL OFF</button>
 </div>
+
 <div class="grid">
 <div class="card"><h2>Living Room</h2><div id="living"></div></div>
 <div class="card"><h2>Kitchen</h2><div id="kitchen"></div></div>
 <div class="card"><h2>Bathroom / Spare</h2><div id="bath"></div></div>
-<div class="card"><h2>Future</h2><p>Camera View: Coming Soon</p><p>LCD Display: Enabled</p></div>
+<div class="card"><h2>Future</h2><p>Camera View: Coming Soon</p><p>LCD/OLED: Optional</p></div>
 </div>
 
 <script>
-
- const MQTT_HOST = "wss://431f345fb6a84bfa856a4d34568a46aa.s1.eu.hivemq.cloud:8884/mqtt";
+const MQTT_HOST = "wss://431f345fb6a84bfa856a4d34568a46aa.s1.eu.hivemq.cloud:8884/mqtt";
 const MQTT_USER = "nhajare1987";
 const MQTT_PASS = "Army@7387";
 
@@ -60,34 +68,27 @@ const topics = [
 "home/spare/relay16"
 ];
 
-const client = mqtt.connect(MQTT_HOST, {
-  username: MQTT_USER,
-  password: MQTT_PASS,
-  clientId: "HAJARE_WEB_" + Math.random().toString(16).substr(2,8),
-  clean: true,
-  reconnectPeriod: 3000
-});
-
-client.on("connect", () => {
-  sys.innerText = "MQTT: CONNECTED";
-  topics.forEach(t => client.subscribe(t + "/status"));
-});
-
-client.on("message", (topic, message) => {
-  let msg = message.toString().trim().toUpperCase();
-  let base = topic.replace("/status", "");
-  let i = topics.indexOf(base);
-  if (i >= 0) setUI(i, msg);
-});
-const ESP_IP = "192.168.1.50";
-
 const names=[
-"Living Fan 80W","LED Bulb 1","Decorative Lamp 1","Decorative Lamp 2","Balcony 1 Light","TV","Robot Charger",
-"Kitchen Fan 60W","Fridge","Mandir Light","Kitchen Light","Balcony Dry Lamp",
-"Bathroom Lamp","Geyser","Exhaust Fan","Spare Relay 16"
+"Living Fan 80W",
+"LED Bulb 1",
+"Decorative Lamp 1",
+"Decorative Lamp 2",
+"Balcony 1 Light",
+"TV",
+"Robot Charger",
+"Kitchen Fan 60W",
+"Fridge",
+"Mandir Light",
+"Kitchen Light",
+"Balcony Dry Lamp",
+"Bathroom Lamp",
+"Geyser",
+"Exhaust Fan",
+"Spare Relay 16"
 ];
 
-let states={};
+let states = {};
+let client;
 
 function box(i){
  let div=document.createElement("div");
@@ -97,58 +98,80 @@ function box(i){
  return div;
 }
 
+function build(){
+ for(let i=0;i<7;i++) living.appendChild(box(i));
+ for(let i=7;i<12;i++) kitchen.appendChild(box(i));
+ for(let i=12;i<16;i++) bath.appendChild(box(i));
+ for(let i=0;i<16;i++) states[i]="OFF";
+ connectMQTT();
+}
+
+function setUI(i,state){
+ state = state.toUpperCase();
+ states[i]=state;
+
+ document.getElementById("s"+i).innerText=state;
+
+ let b=document.getElementById("b"+i);
+ b.innerText=state;
+ b.className=state=="ON" ? "on" : "off";
+}
+
+function toggle(i){
+ let next = states[i]=="ON" ? "OFF" : "ON";
+ client.publish(topics[i] + "/set", next, {retain:true});
+}
+
 function allRelay(cmd){
  for(let i=0;i<16;i++){
    client.publish(topics[i] + "/set", cmd, {retain:true});
  }
 }
- 
-function build(){
- for(let i=0;i<7;i++) living.appendChild(box(i));
- for(let i=7;i<12;i++) kitchen.appendChild(box(i));
- for(let i=12;i<16;i++) bath.appendChild(box(i));
- refresh();
- setInterval(refresh,3000);
-}
 
-function setUI(i,state){
- states[i]=state;
- document.getElementById("s"+i).innerText=state;
- let b=document.getElementById("b"+i);
- b.innerText=state;
- b.className=state=="ON"?"on":"off";
-}
+function connectMQTT(){
+ client = mqtt.connect(MQTT_HOST, {
+   username: MQTT_USER,
+   password: MQTT_PASS,
+   clientId: "HAJARE_WEB_" + Math.random().toString(16).substr(2,8),
+   clean: true,
+   reconnectPeriod: 3000
+ });
 
-function toggle(i){
- let next=states[i]=="ON"?"OFF":"ON";
- client.publish(topics[i] + "/set", next, {retain:true});
-   .then(()=>setUI(i,next))
-   .catch(()=>alert("ESP32 local IP connect nahi hua"));
-}
+ client.on("connect", function(){
+   document.getElementById("sys").innerText = "MQTT: CONNECTED ✅ | GLOBAL CONTROL ACTIVE";
 
-function allRelay(cmd){
- for(let i=0;i<16;i++){
-   fetch(`http://${ESP_IP}/relay?ch=${i}&state=${cmd}`);
-   setUI(i,cmd);
- }
-}
-function toggle(i){
- let next=states[i]=="ON"?"OFF":"ON";
- client.publish(topics[i] + "/set", next, {retain:true});
-}
-function refresh(){
- fetch(`http://${ESP_IP}/status`)
-  .then(r=>r.json())
-  .then(j=>{
-   for(let i=0;i<16;i++) setUI(i,j[i]);
-   sys.innerText="WiFi: CONNECTED | MQTT: ACTIVE | IP: "+ESP_IP;
-  })
-  .catch(()=>{
-   sys.innerText="ESP32 Offline / IP Not Reachable";
-  });
+   for(let i=0;i<16;i++){
+     client.subscribe(topics[i] + "/status");
+     client.subscribe(topics[i] + "/set");
+   }
+ });
+
+ client.on("reconnect", function(){
+   document.getElementById("sys").innerText = "MQTT: Reconnecting...";
+ });
+
+ client.on("offline", function(){
+   document.getElementById("sys").innerText = "MQTT: Offline ❌";
+ });
+
+ client.on("error", function(){
+   document.getElementById("sys").innerText = "MQTT: Error ❌";
+ });
+
+ client.on("message", function(topic, message){
+   let msg = message.toString().trim().toUpperCase();
+
+   let base = topic.replace("/status","").replace("/set","");
+   let i = topics.indexOf(base);
+
+   if(i >= 0){
+     setUI(i,msg);
+   }
+ });
 }
 
 build();
 </script>
+
 </body>
 </html>
