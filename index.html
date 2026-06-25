@@ -25,6 +25,7 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 .cameraBox button{border-radius:8px}
 .cameraFrame{width:100%;aspect-ratio:4/3;background:#07192d;border:0;border-radius:8px;object-fit:cover}
 .hint{color:#7cffc4;font-size:12px;margin:6px 0 0}
+.camStatus{color:#ffd54f;font-size:12px;margin:6px 0 0;min-height:15px}
 </style>
 </head>
 
@@ -55,7 +56,8 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <button class="off" onclick="stopCamera()">STOP</button>
 </div>
 <img id="camView" class="cameraFrame" alt="ESP32-CAM stream">
-<p class="hint">If stream is blocked on GitHub HTTPS, press OPEN.</p>
+<p class="camStatus" id="camStatus"></p>
+<p class="hint">GitHub HTTPS blocks HTTP LAN camera preview. LOAD opens the camera in a new tab when blocked.</p>
 </div>
 </div>
 
@@ -104,6 +106,7 @@ const names=[
 
 let states = {};
 let client;
+const DEFAULT_CAMERA_URL = "http://192.168.1.9:81/stream";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
 function box(i){
@@ -119,7 +122,7 @@ function build(){
  for(let i=7;i<12;i++) kitchen.appendChild(box(i));
  for(let i=12;i<16;i++) bath.appendChild(box(i));
  for(let i=0;i<16;i++) states[i]="OFF";
- if(savedCamUrl) camUrl.value = savedCamUrl;
+ camUrl.value = getInitialCameraUrl();
  connectMQTT();
 }
 
@@ -147,13 +150,47 @@ function allRelay(cmd){
 
 function getCameraUrl(){
  let url = camUrl.value.trim();
+ if(!url) url = DEFAULT_CAMERA_URL;
+ if(!/^https?:\/\//i.test(url)) url = "http://" + url;
+ camUrl.value = url;
  localStorage.setItem("hajareCamUrl", url);
  return url;
 }
 
+function getInitialCameraUrl(){
+ if(!savedCamUrl) return DEFAULT_CAMERA_URL;
+
+ try {
+   let parsed = new URL(savedCamUrl);
+   if(parsed.hostname === "10.225.218.158") return DEFAULT_CAMERA_URL;
+   return savedCamUrl;
+ } catch(e) {
+   return DEFAULT_CAMERA_URL;
+ }
+}
+
+function isBlockedHttpLanPreview(url){
+ try {
+   let parsed = new URL(url);
+   return location.protocol === "https:" && parsed.protocol === "http:";
+ } catch(e) {
+   return false;
+ }
+}
+
 function loadCamera(){
  let url = getCameraUrl();
- if(url) camView.src = url;
+ if(!url) return;
+
+ if(isBlockedHttpLanPreview(url)){
+   camView.removeAttribute("src");
+   camStatus.innerText = "Browser blocked inline HTTP camera preview on HTTPS. Opening camera tab...";
+   window.open(url, "_blank");
+   return;
+ }
+
+ camStatus.innerText = "Loading camera...";
+ camView.src = url;
 }
 
 function openCamera(){
@@ -163,6 +200,7 @@ function openCamera(){
 
 function stopCamera(){
  camView.removeAttribute("src");
+ camStatus.innerText = "Camera stopped.";
 }
 
 function connectMQTT(){
