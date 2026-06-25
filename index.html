@@ -20,6 +20,11 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 .off{background:#d50000}
 .blue{background:#2962ff}
 .master{text-align:center;padding:12px}
+.cameraBox{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.cameraBox input{flex:1;min-width:170px;border:0;border-radius:8px;padding:9px;background:#07192d;color:white}
+.cameraBox button{border-radius:8px}
+.cameraFrame{width:100%;aspect-ratio:4/3;background:#07192d;border:0;border-radius:8px;object-fit:cover}
+.hint{color:#7cffc4;font-size:12px;margin:6px 0 0}
 </style>
 </head>
 
@@ -41,7 +46,17 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <div class="card"><h2>Living Room</h2><div id="living"></div></div>
 <div class="card"><h2>Kitchen</h2><div id="kitchen"></div></div>
 <div class="card"><h2>Bathroom / Spare</h2><div id="bath"></div></div>
-<div class="card"><h2>Future</h2><p>Camera View: Coming Soon</p><p>LCD/OLED: Optional</p></div>
+<div class="card">
+<h2>Camera</h2>
+<div class="cameraBox">
+<input id="camUrl" value="http://10.225.218.158:81/stream">
+<button class="blue" onclick="loadCamera()">LOAD</button>
+<button class="blue" onclick="openCamera()">OPEN</button>
+<button class="off" onclick="stopCamera()">STOP</button>
+</div>
+<img id="camView" class="cameraFrame" alt="ESP32-CAM stream">
+<p class="hint">If stream is blocked on GitHub HTTPS, press OPEN.</p>
+</div>
 </div>
 
 <script>
@@ -89,6 +104,7 @@ const names=[
 
 let states = {};
 let client;
+let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
 function box(i){
  let div=document.createElement("div");
@@ -103,6 +119,7 @@ function build(){
  for(let i=7;i<12;i++) kitchen.appendChild(box(i));
  for(let i=12;i<16;i++) bath.appendChild(box(i));
  for(let i=0;i<16;i++) states[i]="OFF";
+ if(savedCamUrl) camUrl.value = savedCamUrl;
  connectMQTT();
 }
 
@@ -126,6 +143,26 @@ function allRelay(cmd){
  for(let i=0;i<16;i++){
    client.publish(topics[i] + "/set", cmd, {retain:true});
  }
+}
+
+function getCameraUrl(){
+ let url = camUrl.value.trim();
+ localStorage.setItem("hajareCamUrl", url);
+ return url;
+}
+
+function loadCamera(){
+ let url = getCameraUrl();
+ if(url) camView.src = url;
+}
+
+function openCamera(){
+ let url = getCameraUrl();
+ if(url) window.open(url, "_blank");
+}
+
+function stopCamera(){
+ camView.removeAttribute("src");
 }
 
 function connectMQTT(){
