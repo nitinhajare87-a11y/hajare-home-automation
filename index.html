@@ -24,6 +24,10 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 .cameraBox input{flex:1;min-width:170px;border:0;border-radius:8px;padding:9px;background:#07192d;color:white}
 .cameraBox button{border-radius:8px}
 .cameraFrame{width:100%;aspect-ratio:4/3;background:#07192d;border:0;border-radius:8px;object-fit:cover}
+.cameraFrame.is-hidden{display:none}
+.cameraOpenPanel{display:none;align-items:center;justify-content:center;min-height:180px;background:#07192d;border-radius:8px;text-align:center;padding:14px}
+.cameraOpenPanel.is-visible{display:flex}
+.cameraOpenPanel button{border-radius:8px}
 .hint{color:#7cffc4;font-size:12px;margin:6px 0 0}
 .camStatus{color:#ffd54f;font-size:12px;margin:6px 0 0;min-height:15px}
 </style>
@@ -56,6 +60,9 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <button class="off" onclick="stopCamera()">STOP</button>
 </div>
 <img id="camView" class="cameraFrame" alt="ESP32-CAM stream">
+<div id="camOpenPanel" class="cameraOpenPanel">
+<button class="blue" onclick="openCamera()">OPEN CAMERA VIEW</button>
+</div>
 <p class="camStatus" id="camStatus"></p>
 <p class="hint">GitHub HTTPS blocks HTTP LAN camera preview. LOAD opens the camera in a new tab when blocked.</p>
 </div>
@@ -123,6 +130,7 @@ function build(){
  for(let i=12;i<16;i++) bath.appendChild(box(i));
  for(let i=0;i<16;i++) states[i]="OFF";
  camUrl.value = getInitialCameraUrl();
+ localStorage.setItem("hajareCamUrl", camUrl.value);
  connectMQTT();
 }
 
@@ -163,6 +171,7 @@ function getInitialCameraUrl(){
  try {
    let parsed = new URL(savedCamUrl);
    if(parsed.hostname === "10.225.218.158") return DEFAULT_CAMERA_URL;
+   if(parsed.hostname === "192.168.1.9" && parsed.port === "81") return DEFAULT_CAMERA_URL;
    return savedCamUrl;
  } catch(e) {
    return DEFAULT_CAMERA_URL;
@@ -184,11 +193,15 @@ function loadCamera(){
 
  if(isBlockedHttpLanPreview(url)){
    camView.removeAttribute("src");
+   camView.classList.add("is-hidden");
+   camOpenPanel.classList.add("is-visible");
    camStatus.innerText = "Browser blocked inline HTTP camera preview on HTTPS. Opening camera tab...";
    window.open(url, "_blank");
    return;
  }
 
+ camOpenPanel.classList.remove("is-visible");
+ camView.classList.remove("is-hidden");
  camStatus.innerText = "Loading camera...";
  camView.src = url;
 }
@@ -200,6 +213,8 @@ function openCamera(){
 
 function stopCamera(){
  camView.removeAttribute("src");
+ camView.classList.remove("is-hidden");
+ camOpenPanel.classList.remove("is-visible");
  camStatus.innerText = "Camera stopped.";
 }
 
