@@ -50,7 +50,7 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <div class="card">
 <h2>Camera</h2>
 <div class="cameraBox">
-<input id="camUrl" value="http://192.168.1.9:81/stream">
+<input id="camUrl" value="http://192.168.1.9/">
 <button class="blue" onclick="loadCamera()">LOAD</button>
 <button class="blue" onclick="openCamera()">OPEN</button>
 <button class="off" onclick="stopCamera()">STOP</button>
@@ -106,7 +106,7 @@ const names=[
 
 let states = {};
 let client;
-const DEFAULT_CAMERA_URL = "http://192.168.1.9:81/stream";
+const DEFAULT_CAMERA_URL = "http://192.168.1.9/";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
 function box(i){
