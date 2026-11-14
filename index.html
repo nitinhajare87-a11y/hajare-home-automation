@@ -2,42 +2,48 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HAJARE Electronics Global Dashboard</title>
+<title>SAMUBOT AI Assistant Home Control</title>
 
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
 <style>
 body{margin:0;font-family:Arial;background:#06111f;color:white}
-header{text-align:center;background:#0b1d35;padding:16px}
+header{text-align:center;background:#0b1d35;padding:14px}
 h1{margin:0;color:#00e5ff;font-size:24px}
 .sub{color:#7cffc4;font-size:13px}
 .status{text-align:center;color:#ffd54f;padding:10px;font-weight:bold}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:12px}
-.card{background:#102642;border-radius:16px;padding:12px}
-.device{display:flex;justify-content:space-between;align-items:center;background:#07192d;margin:8px 0;padding:10px;border-radius:12px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(240px,1fr));gap:12px;padding:12px}
+.card{background:#102642;border-radius:12px;padding:12px;min-height:150px}
+.card h2{margin:0 0 12px;font-size:20px}
+.device{display:flex;justify-content:space-between;align-items:center;background:#07192d;margin:8px 0;padding:10px;border-radius:10px;gap:8px}
+.device span{line-height:1.25}
 button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold;cursor:pointer}
 .on{background:#00c853}
 .off{background:#d50000}
 .blue{background:#2962ff}
-.master{text-align:center;padding:12px}
+.amber{background:#ff8f00}
+.master{text-align:center;padding:10px}
 .cameraBox{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .cameraBox input{flex:1;min-width:170px;border:0;border-radius:8px;padding:9px;background:#07192d;color:white}
 .cameraBox button{border-radius:8px}
-.cameraFrame{width:100%;aspect-ratio:4/3;background:#07192d;border:0;border-radius:8px;object-fit:cover}
-.cameraFrame.is-hidden{display:none}
-.cameraOpenPanel{display:none;align-items:center;justify-content:center;min-height:180px;background:#07192d;border-radius:8px;text-align:center;padding:14px}
-.cameraOpenPanel.is-visible{display:flex}
-.cameraOpenPanel button{border-radius:8px}
+.cameraFrame{width:100%;height:92px;background:#07192d;border:0;border-radius:8px;object-fit:cover}
 .hint{color:#7cffc4;font-size:12px;margin:6px 0 0}
-.camStatus{color:#ffd54f;font-size:12px;margin:6px 0 0;min-height:15px}
+.sceneGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.sceneGrid button{border-radius:10px;padding:10px 8px}
+.metric{display:flex;justify-content:space-between;align-items:center;background:#07192d;margin:8px 0;padding:10px;border-radius:10px}
+.metric b{color:#7cffc4}
+.note{background:#07192d;border-radius:10px;padding:10px;margin:8px 0;color:#d6f7ff;font-size:13px;line-height:1.35}
+.contact{font-size:20px;color:#00e5ff;font-weight:bold;letter-spacing:0}
+@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(240px,1fr))}}
+@media(max-width:620px){.grid{grid-template-columns:1fr}.cameraFrame{height:150px}}
 </style>
 </head>
 
 <body>
 
 <header>
-<h1>HAJARE ELECTRONICS SYSTEM</h1>
-<div class="sub">ESP32 16 Relay Global MQTT Dashboard</div>
+<h1>SAMUBOT AI ASSISTANT</h1>
+<div class="sub">HAJARE Electronics Home Control Global Dashboard</div>
 </header>
 
 <div class="status" id="sys">MQTT: Connecting...</div>
@@ -49,86 +55,110 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 
 <div class="grid">
 <div class="card"><h2>Living Room</h2><div id="living"></div></div>
-<div class="card"><h2>Kitchen</h2><div id="kitchen"></div></div>
-<div class="card"><h2>Bathroom / Spare</h2><div id="bath"></div></div>
+<div class="card"><h2>Master Bedroom / Child Room</h2><div id="kitchen"></div></div>
+<div class="card"><h2>Passage / Bathrooms / Spare</h2><div id="bath"></div></div>
 <div class="card">
 <h2>Camera</h2>
 <div class="cameraBox">
-<input id="camUrl" value="http://192.168.1.9/">
+<input id="camUrl" value="http://192.168.1.6:81/stream">
 <button class="blue" onclick="loadCamera()">LOAD</button>
 <button class="blue" onclick="openCamera()">OPEN</button>
 <button class="off" onclick="stopCamera()">STOP</button>
 </div>
 <img id="camView" class="cameraFrame" alt="ESP32-CAM stream">
-<div id="camOpenPanel" class="cameraOpenPanel">
-<button class="blue" onclick="openCamera()">OPEN CAMERA VIEW</button>
+<p class="hint" id="camStatus">If stream is blocked on GitHub HTTPS, press OPEN.</p>
 </div>
-<p class="camStatus" id="camStatus"></p>
-<p class="hint">GitHub HTTPS blocks HTTP LAN camera preview. LOAD opens the camera in a new tab when blocked.</p>
+
+<div class="card">
+<h2>Quick Scenes</h2>
+<div class="sceneGrid">
+<button class="blue" onclick="sceneEvening()">EVENING</button>
+<button class="amber" onclick="sceneNight()">NIGHT</button>
+<button class="blue" onclick="sceneChildStudy()">CHILD STUDY</button>
+<button class="off" onclick="sceneAway()">AWAY</button>
+</div>
+<p class="hint">Scene buttons publish normal MQTT relay commands.</p>
+</div>
+
+<div class="card">
+<h2>Live Feedback</h2>
+<div class="metric"><span>Relays ON</span><b id="onCount">0 / 12</b></div>
+<div class="metric"><span>Last Action</span><b id="lastAction">Waiting</b></div>
+<div class="metric"><span>Control</span><b>GLOBAL MQTT</b></div>
+</div>
+
+<div class="card">
+<h2>Camera / Network</h2>
+<div class="note">Camera IP: <b>192.168.1.6</b><br>Stream: <b>:81/stream</b></div>
+<div class="note">GitHub HTTPS may block inline local camera preview. OPEN button is best for camera.</div>
+</div>
+
+<div class="card">
+<h2>Support</h2>
+<div class="note">HAJARE ELECTRONICS<br><span class="contact">8800466063</span></div>
+<div class="note">Suggestion: keep relay ESP32 and ESP32-CAM on static IP for stable home automation.</div>
 </div>
 </div>
 
 <script>
 const MQTT_HOST = "wss://431f345fb6a84bfa856a4d34568a46aa.s1.eu.hivemq.cloud:8884/mqtt";
 const MQTT_USER = "nhajare1987";
-const MQTT_PASS = "Army@7387";
+const MQTT_PASS = "******";
 
 const topics = [
-"home/living/fan80w",
-"home/living/ledbulb1",
-"home/living/decorative1",
-"home/living/decorative2",
-"home/living/balcony1_light",
-"home/living/tv",
-"home/living/robot_charge",
-"home/kitchen/fan60w",
-"home/kitchen/fridge",
-"home/kitchen/mandir_light1",
-"home/kitchen/kitchen_light",
-"home/kitchen/balcony_dry_lamp",
-"home/bathroom/lamp1",
-"home/bathroom/geyser",
-"home/bathroom/exhaust_fan",
-"home/spare/relay16"
+"home/living_room",
+"home/living_room/light_2",
+"home/living_room/light_3",
+"home/living_room/fan_1",
+"home/master_bedroom",
+"home/child_room/socket_lamp",
+"home/child_room/fan_lamp",
+"home/passage/lamp",
+"home/bathroom/common",
+"home/bathroom/master",
+"home/spare_1",
+"home/spare_2"
 ];
 
 const names=[
-"Living Fan 80W",
-"LED Bulb 1",
-"Decorative Lamp 1",
-"Decorative Lamp 2",
-"Balcony 1 Light",
-"TV",
-"Robot Charger",
-"Kitchen Fan 60W",
-"Fridge",
-"Mandir Light",
-"Kitchen Light",
-"Balcony Dry Lamp",
-"Bathroom Lamp",
-"Geyser",
-"Exhaust Fan",
-"Spare Relay 16"
+"Living Room Light 1",
+"Living Room Light 2",
+"Living Room Light 3",
+"Living Room Fan 1",
+"Master Bedroom Fan/Lamp",
+"Child Room Lamp/Socket",
+"Child Room Fan/Lamp",
+"Passage Area Lamp",
+"Common Bathroom Geyser/Lamp/Fan",
+"Master Bathroom Lamp/Fan",
+"Spare 1",
+"Spare 2"
 ];
+
+const configuredRelayIndexes = new Set(Array.from({length: 12}, (_, i) => i));
 
 let states = {};
 let client;
-const DEFAULT_CAMERA_URL = "http://192.168.1.9/";
+const DEFAULT_CAMERA_URL = "http://192.168.1.6:81/stream";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
 function box(i){
  let div=document.createElement("div");
  div.className="device";
+ if(!configuredRelayIndexes.has(i)){
+  div.innerHTML=`<span>${i+1}. ${names[i]} <b>GPIO PENDING</b></span><button class="off" disabled>UNCONFIGURED</button>`;
+  return div;
+ }
  div.innerHTML=`<span>${i+1}. ${names[i]} <b id="s${i}">OFF</b></span>
  <button id="b${i}" class="off" onclick="toggle(${i})">OFF</button>`;
  return div;
 }
 
 function build(){
- for(let i=0;i<7;i++) living.appendChild(box(i));
- for(let i=7;i<12;i++) kitchen.appendChild(box(i));
- for(let i=12;i<16;i++) bath.appendChild(box(i));
- for(let i=0;i<16;i++) states[i]="OFF";
+ for(let i=0;i<4;i++) living.appendChild(box(i));
+ for(let i=4;i<7;i++) kitchen.appendChild(box(i));
+ for(let i=7;i<12;i++) bath.appendChild(box(i));
+ for(let i=0;i<12;i++) states[i]="OFF";
  camUrl.value = getInitialCameraUrl();
  localStorage.setItem("hajareCamUrl", camUrl.value);
  connectMQTT();
@@ -138,22 +168,65 @@ function setUI(i,state){
  state = state.toUpperCase();
  states[i]=state;
 
- document.getElementById("s"+i).innerText=state;
+  const status = document.getElementById("s"+i);
+  if (!status) return;
+  status.innerText=state;
 
  let b=document.getElementById("b"+i);
+  if (!b) return;
  b.innerText=state;
  b.className=state=="ON" ? "on" : "off";
+ updateFeedback();
 }
 
 function toggle(i){
+ if(!client || !client.connected){ lastAction.innerText = "MQTT OFFLINE"; return; }
  let next = states[i]=="ON" ? "OFF" : "ON";
- client.publish(topics[i] + "/set", next, {retain:true});
+ client.publish(topics[i] + "/set", next, {retain:false});
+ lastAction.innerText = names[i].split("/")[0] + " " + next + " (waiting)";
 }
 
 function allRelay(cmd){
- for(let i=0;i<16;i++){
-   client.publish(topics[i] + "/set", cmd, {retain:true});
+ if(!client || !client.connected){ lastAction.innerText = "MQTT OFFLINE"; return; }
+  for(let i=0;i<12;i++){
+    if(configuredRelayIndexes.has(i)) client.publish(topics[i] + "/set", cmd, {retain:false});
  }
+ lastAction.innerText = "ALL " + cmd;
+}
+
+function relayCmd(i, cmd){
+  if(!configuredRelayIndexes.has(i)){ lastAction.innerText = names[i] + " GPIO pending"; return; }
+ if(client && client.connected) client.publish(topics[i] + "/set", cmd, {retain:false});
+}
+
+function sceneEvening(){
+  relayCmd(0, "ON");
+  relayCmd(4, "ON");
+ lastAction.innerText = "EVENING";
+}
+
+function sceneNight(){
+ allRelay("OFF");
+ lastAction.innerText = "NIGHT";
+}
+
+function sceneChildStudy(){
+  relayCmd(5, "ON");
+  relayCmd(6, "ON");
+ lastAction.innerText = "CHILD STUDY";
+}
+
+function sceneAway(){
+ allRelay("OFF");
+ lastAction.innerText = "AWAY";
+}
+
+function updateFeedback(){
+ let count = 0;
+  for(let i=0;i<12;i++){
+   if(states[i] == "ON") count++;
+ }
+ onCount.innerText = count + " / 12";
 }
 
 function getCameraUrl(){
@@ -171,50 +244,35 @@ function getInitialCameraUrl(){
  try {
    let parsed = new URL(savedCamUrl);
    if(parsed.hostname === "10.225.218.158") return DEFAULT_CAMERA_URL;
-   if(parsed.hostname === "192.168.1.9" && parsed.port === "81") return DEFAULT_CAMERA_URL;
+   if(parsed.hostname === "192.168.1.9") return DEFAULT_CAMERA_URL;
    return savedCamUrl;
  } catch(e) {
    return DEFAULT_CAMERA_URL;
  }
 }
 
-function isBlockedHttpLanPreview(url){
- try {
-   let parsed = new URL(url);
-   return location.protocol === "https:" && parsed.protocol === "http:";
- } catch(e) {
-   return false;
- }
-}
-
 function loadCamera(){
  let url = getCameraUrl();
  if(!url) return;
-
- if(isBlockedHttpLanPreview(url)){
-   camView.removeAttribute("src");
-   camView.classList.add("is-hidden");
-   camOpenPanel.classList.add("is-visible");
-   camStatus.innerText = "Browser blocked inline HTTP camera preview on HTTPS. Opening camera tab...";
+ if(location.protocol === "https:" && url.startsWith("http://")){
+   camStatus.innerText = "HTTPS page blocks inline HTTP camera. Opening camera tab...";
    window.open(url, "_blank");
    return;
  }
-
- camOpenPanel.classList.remove("is-visible");
- camView.classList.remove("is-hidden");
  camStatus.innerText = "Loading camera...";
  camView.src = url;
 }
 
 function openCamera(){
  let url = getCameraUrl();
- if(url) window.open(url, "_blank");
+ if(url) {
+   camStatus.innerText = "Camera opened in new tab.";
+   window.open(url, "_blank");
+ }
 }
 
 function stopCamera(){
  camView.removeAttribute("src");
- camView.classList.remove("is-hidden");
- camOpenPanel.classList.remove("is-visible");
  camStatus.innerText = "Camera stopped.";
 }
 
@@ -227,31 +285,36 @@ function connectMQTT(){
    reconnectPeriod: 3000
  });
 
- client.on("connect", function(){
-   document.getElementById("sys").innerText = "MQTT: CONNECTED ✅ | GLOBAL CONTROL ACTIVE";
 
-   for(let i=0;i<16;i++){
-     client.subscribe(topics[i] + "/status");
-     client.subscribe(topics[i] + "/set");
+ client.on("connect", function(){
+   document.getElementById("sys").innerText = "MQTT: CONNECTED | GLOBAL CONTROL ACTIVE";
+   lastAction.innerText = "MQTT CONNECTED";
+
+    for(let i=0;i<12;i++){
+      if(configuredRelayIndexes.has(i)) client.subscribe(topics[i] + "/status");
    }
  });
 
  client.on("reconnect", function(){
    document.getElementById("sys").innerText = "MQTT: Reconnecting...";
+   lastAction.innerText = "Reconnecting";
  });
 
  client.on("offline", function(){
-   document.getElementById("sys").innerText = "MQTT: Offline ❌";
+   document.getElementById("sys").innerText = "MQTT: Offline";
+   lastAction.innerText = "Offline";
  });
 
  client.on("error", function(){
-   document.getElementById("sys").innerText = "MQTT: Error ❌";
+   document.getElementById("sys").innerText = "MQTT: Error";
+   lastAction.innerText = "MQTT Error";
  });
 
  client.on("message", function(topic, message){
    let msg = message.toString().trim().toUpperCase();
 
-   let base = topic.replace("/status","").replace("/set","");
+   if(!topic.endsWith("/status") || (msg !== "ON" && msg !== "OFF")) return;
+   let base = topic.replace("/status","");
    let i = topics.indexOf(base);
 
    if(i >= 0){
@@ -265,3 +328,4 @@ build();
 
 </body>
 </html>
+
