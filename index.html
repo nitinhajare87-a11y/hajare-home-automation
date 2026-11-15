@@ -55,8 +55,8 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 
 <details class="mqttSettings">
 <summary>Remote MQTT account settings</summary>
-<p class="hint">Enter a broker account allowed to publish relay commands and subscribe to relay status. Credentials stay in this browser session and are not written into this page.</p>
-<input id="mqttUser" autocomplete="username" value="nhajare1987" placeholder="MQTT username">
+<p class="hint">Enter the broker account once. It is saved in this browser/device and reconnects automatically when you open the dashboard. Use FORGET to remove it.</p>
+<input id="mqttUser" autocomplete="username" value="nhajare" placeholder="MQTT username">
 <input id="mqttPassword" autocomplete="current-password" type="password" placeholder="MQTT password">
 <button class="blue" onclick="connectMQTTFromForm()">CONNECT</button>
 <button class="off" onclick="forgetMQTT()">FORGET</button>
@@ -168,6 +168,10 @@ const LOCAL_CONTROLLER_URL = "http://192.168.1.6/";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
 function speak(text, lang){
+ if(window.HajareVoice && typeof window.HajareVoice.speak==="function"){
+  window.HajareVoice.speak(text,lang||voiceLanguage.value||"hi-IN");
+  return;
+ }
  if(!window.speechSynthesis) return;
  window.speechSynthesis.cancel();
  const utterance=new SpeechSynthesisUtterance(text);
@@ -186,6 +190,11 @@ function speakWelcome(){
 }
 
 function startVoiceControl(){
+ if(window.HajareVoice && typeof window.HajareVoice.startListening==="function"){
+  voiceStatus.innerText="Listening... बोलिए / बोला / Speak now";
+  window.HajareVoice.startListening(voiceLanguage.value);
+  return;
+ }
  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
  if(!SpeechRecognition){ voiceStatus.innerText="Voice recognition is unavailable in this browser. Type the command instead."; return; }
  const recognition = new SpeechRecognition();
@@ -198,6 +207,14 @@ function startVoiceControl(){
  recognition.onend = () => { if(voiceStatus.innerText==="Listening...") voiceStatus.innerText="No speech detected. Tap VOICE and try again."; };
  recognition.start();
 }
+
+// Android APK routes speech through Android's native speech recognizer. Browsers
+// continue to use Web Speech API above. Native results come back through this hook.
+function onNativeVoiceResult(transcript){
+ voiceCommand.value=transcript;
+ runVoiceCommand();
+}
+function onNativeVoiceStatus(message){ voiceStatus.innerText=message; }
 
 function runVoiceCommand(){
  const raw=voiceCommand.value.trim();
@@ -381,9 +398,15 @@ function stopCamera(){
 }
 
 function connectMQTT(){
- const username = sessionStorage.getItem("hajareMqttUser") || "nhajare";
- const password = sessionStorage.getItem("hajareMqttPassword") || "";
+ // Keep credentials across browser/app launches. Migrate a prior session login once.
+ const username = localStorage.getItem("hajareMqttUser") || sessionStorage.getItem("hajareMqttUser") || "nhajare";
+ const password = localStorage.getItem("hajareMqttPassword") || sessionStorage.getItem("hajareMqttPassword") || "";
+ if(password){
+   localStorage.setItem("hajareMqttUser",username);
+   localStorage.setItem("hajareMqttPassword",password);
+ }
  document.getElementById("mqttUser").value = username;
+ document.getElementById("mqttPassword").value = password;
  if(!username || !password){
    document.getElementById("sys").innerText = "MQTT setup required for remote control";
    lastAction.innerText = "Enter broker credentials above";
@@ -439,21 +462,26 @@ function connectMQTTFromForm(){
  const username = document.getElementById("mqttUser").value.trim();
  const password = document.getElementById("mqttPassword").value;
  if(!username || !password){ lastAction.innerText = "Enter both MQTT fields"; return; }
- sessionStorage.setItem("hajareMqttUser", username);
- sessionStorage.setItem("hajareMqttPassword", password);
+ localStorage.setItem("hajareMqttUser", username);
+ localStorage.setItem("hajareMqttPassword", password);
+ sessionStorage.removeItem("hajareMqttUser");
+ sessionStorage.removeItem("hajareMqttPassword");
  if(client) client.end(true);
  document.getElementById("sys").innerText = "MQTT: Connecting...";
  connectMQTT();
 }
 
 function forgetMQTT(){
+ localStorage.removeItem("hajareMqttUser");
+ localStorage.removeItem("hajareMqttPassword");
  sessionStorage.removeItem("hajareMqttUser");
  sessionStorage.removeItem("hajareMqttPassword");
+ document.getElementById("mqttUser").value = "nhajare";
  document.getElementById("mqttPassword").value = "";
  if(client) client.end(true);
  client = undefined;
  document.getElementById("sys").innerText = "MQTT setup required for remote control";
- lastAction.innerText = "Credentials cleared from this session";
+ lastAction.innerText = "Credentials cleared from this browser/device";
 }
 
 build();
