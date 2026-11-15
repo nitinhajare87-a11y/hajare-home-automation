@@ -24,7 +24,7 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 .amber{background:#ff8f00}
 .master{text-align:center;padding:10px}
 .voiceControl{max-width:760px;margin:0 auto 10px;padding:10px 14px;background:#102642;border-radius:10px;text-align:center}
-.voiceControl input{width:min(65%,430px);border:0;border-radius:8px;padding:10px;background:#07192d;color:white}
+.voiceControl input,.voiceControl select{width:min(65%,430px);border:0;border-radius:8px;padding:10px;background:#07192d;color:white;margin:4px}
 .cameraBox{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .cameraBox input{flex:1;min-width:170px;border:0;border-radius:8px;padding:9px;background:#07192d;color:white}
 .cameraBox button{border-radius:8px}
@@ -48,7 +48,7 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 
 <header>
 <h1>SAMUBOT AI ASSISTANT</h1>
-<div class="sub">HAJARE Electronics Home Control Global Dashboard</div>
+<div class="sub">Hajare Electrical and Electronic Services · Lohegaon, Pune</div>
 </header>
 
 <div class="status" id="sys">MQTT: Connecting...</div>
@@ -57,7 +57,7 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <summary>Remote MQTT account settings</summary>
 <p class="hint">Enter a broker account allowed to publish relay commands and subscribe to relay status. Credentials stay in this browser session and are not written into this page.</p>
 <input id="mqttUser" autocomplete="username" value="nhajare1987" placeholder="MQTT username">
-<input id="mqttPassword" autocomplete="current-password" type="Army@7387" placeholder="MQTT password">
+<input id="mqttPassword" autocomplete="current-password" type="password" placeholder="MQTT password">
 <button class="blue" onclick="connectMQTTFromForm()">CONNECT</button>
 <button class="off" onclick="forgetMQTT()">FORGET</button>
 </details>
@@ -69,10 +69,14 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 </div>
 
 <div class="voiceControl">
+<select id="voiceLanguage" aria-label="Voice language">
+<option value="hi-IN">हिन्दी</option><option value="mr-IN">मराठी</option><option value="en-IN">English (India)</option>
+</select>
+<button class="blue" onclick="speakWelcome()">🔊 WELCOME</button>
 <input id="voiceCommand" autocomplete="off" placeholder="Say or type: living room fan on / all relays off">
 <button class="blue" onclick="runVoiceCommand()">RUN COMMAND</button>
 <button class="amber" id="voiceButton" onclick="startVoiceControl()">🎙 VOICE</button>
-<div class="hint" id="voiceStatus">Voice commands use the connected MQTT account and the same 12 relay map.</div>
+<div class="hint" id="voiceStatus">हिन्दी, मराठी या English चुनें। उदाहरण: “लाइट बंद करो”, “पंखा चालू करा”, “turn light off”.</div>
 </div>
 
 <div class="grid">
@@ -163,11 +167,29 @@ const DEFAULT_CAMERA_URL = "http://192.168.1.6:81/stream";
 const LOCAL_CONTROLLER_URL = "http://192.168.1.6/";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
+function speak(text, lang){
+ if(!window.speechSynthesis) return;
+ window.speechSynthesis.cancel();
+ const utterance=new SpeechSynthesisUtterance(text);
+ utterance.lang=lang||voiceLanguage.value||"hi-IN";
+ utterance.rate=0.94;
+ window.speechSynthesis.speak(utterance);
+}
+function speakWelcome(){
+ const lang=voiceLanguage.value;
+ const greeting=lang==="mr-IN"
+  ? "नमस्कार! हजारे इलेक्ट्रिकल अँड इलेक्ट्रॉनिक सर्व्हिसेस, लोहेगाव, पुणे येथे आपले स्वागत आहे."
+  : lang==="en-IN"
+   ? "Welcome to Hajare Electrical and Electronic Services, Lohegaon, Pune."
+   : "नमस्कार! हजारे इलेक्ट्रिकल एंड इलेक्ट्रॉनिक सर्विसेज, लोहेगांव, पुणे में आपका स्वागत है।";
+ speak(greeting,lang);
+}
+
 function startVoiceControl(){
  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
  if(!SpeechRecognition){ voiceStatus.innerText="Voice recognition is unavailable in this browser. Type the command instead."; return; }
  const recognition = new SpeechRecognition();
- recognition.lang="en-IN";
+ recognition.lang=voiceLanguage.value;
  recognition.interimResults=false;
  recognition.maxAlternatives=1;
  voiceStatus.innerText="Listening...";
@@ -179,30 +201,35 @@ function startVoiceControl(){
 
 function runVoiceCommand(){
  const raw=voiceCommand.value.trim();
- const text=raw.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
- const on=/\b(on|start|enable|activate|chalu|shuru|khol)\b/.test(text);
- const off=/\b(off|stop|disable|deactivate|band|bujha)\b/.test(text);
- if(on===off){ voiceStatus.innerText="Command mein ek clear ON ya OFF boliye."; return; }
+ const text=raw.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+ // Speech recognition often hears the spoken word “off” as “of”. Include common
+ // Hindi/Marathi words in both Devanagari and Roman spelling.
+ const on=/(^|\s)(on|start|enable|activate|chalu|chaalu|shuru|khol|lagao|jalao)(\s|$)/.test(text)
+  || /(चालू|शुरू|लगा दो|लावा|चालू करा|चालू करो)/u.test(text);
+ const off=/(^|\s)(off|of|stop|disable|deactivate|band|bnd|bujha|bujhao|bujha do|band karo|band kar|band kara|band karao)(\s|$)/.test(text)
+  || /(बंद|बन्द|बु[झज]ा|बुझा|बंद करा|बंद करो|बंद कर|बंद करायचं|बंद करा ना|बंद करा हो)/u.test(text);
+ if(on===off){ voiceStatus.innerText="Command clear nahi hai. ON/चालू ya OFF/बंद mein se ek boliye."; speak("कृपया चालू या बंद, एक स्पष्ट आदेश बोलिए।"); return; }
  if(!client || !client.connected){ voiceStatus.innerText="MQTT offline. Broker connect karke dobara try karein."; return; }
  const state=on?"ON":"OFF";
+ const has=(...words)=>words.some(word=>text.includes(word));
  let channel=-1;
- if(/\b(all|sabhi|every|sagle|sagale|saare)\b/.test(text) || text.includes("sab relay")) channel=0;
+ if(/\b(all|sabhi|every|sagle|sagale|saare|sab)\b/.test(text) || has("sab relay","सब रिले","सभी रिले","सगळे रिले","सगळे दिवे","सारे लाइट","all lights")) channel=0;
  else if(/spare 2|\b(r|relay|channel)\s*12\b/.test(text)) channel=12;
  else if(/spare 1|\b(r|relay|channel)\s*11\b/.test(text)) channel=11;
- else if((text.includes("master")&&text.includes("bath"))||/\b(r|relay|channel)\s*10\b/.test(text)) channel=10;
- else if(text.includes("geyser")||text.includes("common bath")||/\b(r|relay|channel)\s*9\b/.test(text)) channel=9;
- else if(text.includes("passage")||text.includes("corridor")||/\b(r|relay|channel)\s*8\b/.test(text)) channel=8;
- else if((text.includes("child")&&text.includes("fan"))||/\b(r|relay|channel)\s*7\b/.test(text)) channel=7;
- else if((text.includes("child")&&/(socket|lamp|light)/.test(text))||/\b(r|relay|channel)\s*6\b/.test(text)) channel=6;
- else if(text.includes("master bedroom")||text.includes("master bed")||/\b(r|relay|channel)\s*5\b/.test(text)) channel=5;
- else if((text.includes("living")&&text.includes("fan"))||/\b(r|relay|channel)\s*4\b/.test(text)) channel=4;
- else if(text.includes("living")&&(/light 3|light three|\b(r|relay|channel)\s*3\b/.test(text))) channel=3;
- else if(text.includes("living")&&(/light 2|light two|\b(r|relay|channel)\s*2\b/.test(text))) channel=2;
- else if(text.includes("living")&&/(light|lamp)/.test(text)) channel=1;
+ else if((has("master","मुख्य")&&has("bath","bathroom","बाथरूम","स्नानगृह"))||/\b(r|relay|channel)\s*10\b/.test(text)) channel=10;
+ else if(has("geyser","गीजर","गिझर","common bath","सामान्य बाथरूम")||/\b(r|relay|channel)\s*9\b/.test(text)) channel=9;
+ else if(has("passage","corridor","पैसेज","कॉरिडोर")||/\b(r|relay|channel)\s*8\b/.test(text)) channel=8;
+ else if((has("child","बच्चे","मुलांची","मुलांच्या")&&has("fan","पंखा","फॅन"))||/\b(r|relay|channel)\s*7\b/.test(text)) channel=7;
+ else if((has("child","बच्चे","मुलांची","मुलांच्या")&&has("socket","lamp","light","सॉकेट","लाइट","दिवा","दिवा","बल्ब"))||/\b(r|relay|channel)\s*6\b/.test(text)) channel=6;
+ else if(has("master bedroom","master bed","मास्टर बेडरूम","मुख्य बेडरूम")||/\b(r|relay|channel)\s*5\b/.test(text)) channel=5;
+ else if((has("living","लिविंग","बैठक","हॉल")&&has("fan","पंखा","फॅन"))||/\b(r|relay|channel)\s*4\b/.test(text)) channel=4;
+ else if(has("living","लिविंग","बैठक","हॉल")&&(/light 3|light three|लाइट 3|दिवा 3|तीसरा लाइट|तिसरा दिवा|\b(r|relay|channel)\s*3\b/.test(text))) channel=3;
+ else if(has("living","लिविंग","बैठक","हॉल")&&(/light 2|light two|लाइट 2|दिवा 2|दूसरा लाइट|दुसरा दिवा|\b(r|relay|channel)\s*2\b/.test(text))) channel=2;
+ else if(has("living","लिविंग","बैठक","हॉल")&&/(light|lamp|लाइट|दिवा|बल्ब)/u.test(text)) channel=1;
  else { for(let n=12;n>=1;n--) if(new RegExp("\\b(r|relay|channel)\\s*"+n+"\\b").test(text)){channel=n;break;} }
- if(channel<0){ voiceStatus.innerText="Load samajh nahi aaya. Exact naam boliye, jaise living room fan ya geyser."; return; }
- if(channel===0){ allRelay(state); voiceStatus.innerText="All 12 relays " + state + " command sent."; return; }
- publishRelayCommand(channel-1,state).then(()=>voiceStatus.innerText=names[channel-1]+" "+state+" command sent.").catch(()=>voiceStatus.innerText="Command publish nahi hua; MQTT permissions check karein.");
+ if(channel<0){ voiceStatus.innerText="Load samajh nahi aaya. Load ka naam bhi boliye—जैसे living room light, पंखा, geyser."; speak("लोड का नाम समझ नहीं आया। कृपया कमरे और लोड का नाम दोहराएं।"); return; }
+ if(channel===0){ allRelay(state); voiceStatus.innerText="All 12 relays " + state + " command sent."; speak(state==="ON"?"सभी बारह रिले चालू करने का आदेश भेजा।":"सभी बारह रिले बंद करने का आदेश भेजा।"); return; }
+ publishRelayCommand(channel-1,state).then(()=>{voiceStatus.innerText=names[channel-1]+" "+state+" command sent."; speak(names[channel-1]+(state==="ON"?" चालू":" बंद"),voiceLanguage.value);}).catch(()=>{voiceStatus.innerText="Command publish nahi hua; MQTT permissions check karein."; speak("कमांड नहीं भेजा गया। MQTT कनेक्शन जांचें।");});
 }
 
 function box(i){
