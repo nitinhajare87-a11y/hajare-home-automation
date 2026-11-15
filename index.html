@@ -23,6 +23,8 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 .blue{background:#2962ff}
 .amber{background:#ff8f00}
 .master{text-align:center;padding:10px}
+.voiceControl{max-width:760px;margin:0 auto 10px;padding:10px 14px;background:#102642;border-radius:10px;text-align:center}
+.voiceControl input{width:min(65%,430px);border:0;border-radius:8px;padding:10px;background:#07192d;color:white}
 .cameraBox{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .cameraBox input{flex:1;min-width:170px;border:0;border-radius:8px;padding:9px;background:#07192d;color:white}
 .cameraBox button{border-radius:8px}
@@ -64,6 +66,13 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <button class="blue" onclick="allRelay('ON')">ALL ON</button>
 <button class="blue" onclick="allRelay('OFF')">ALL OFF</button>
 <button class="amber" onclick="openLocalController()">LOCAL RELAY CONTROL</button>
+</div>
+
+<div class="voiceControl">
+<input id="voiceCommand" autocomplete="off" placeholder="Say or type: living room fan on / all relays off">
+<button class="blue" onclick="runVoiceCommand()">RUN COMMAND</button>
+<button class="amber" id="voiceButton" onclick="startVoiceControl()">🎙 VOICE</button>
+<div class="hint" id="voiceStatus">Voice commands use the connected MQTT account and the same 12 relay map.</div>
 </div>
 
 <div class="grid">
@@ -153,6 +162,48 @@ let client;
 const DEFAULT_CAMERA_URL = "http://192.168.1.6:81/stream";
 const LOCAL_CONTROLLER_URL = "http://192.168.1.6/";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
+
+function startVoiceControl(){
+ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+ if(!SpeechRecognition){ voiceStatus.innerText="Voice recognition is unavailable in this browser. Type the command instead."; return; }
+ const recognition = new SpeechRecognition();
+ recognition.lang="en-IN";
+ recognition.interimResults=false;
+ recognition.maxAlternatives=1;
+ voiceStatus.innerText="Listening...";
+ recognition.onresult = event => { voiceCommand.value=event.results[0][0].transcript; runVoiceCommand(); };
+ recognition.onerror = event => { voiceStatus.innerText="Voice error: " + event.error + ". You can type the command."; };
+ recognition.onend = () => { if(voiceStatus.innerText==="Listening...") voiceStatus.innerText="No speech detected. Tap VOICE and try again."; };
+ recognition.start();
+}
+
+function runVoiceCommand(){
+ const raw=voiceCommand.value.trim();
+ const text=raw.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+ const on=/\b(on|start|enable|activate|chalu|shuru|khol)\b/.test(text);
+ const off=/\b(off|stop|disable|deactivate|band|bujha)\b/.test(text);
+ if(on===off){ voiceStatus.innerText="Command mein ek clear ON ya OFF boliye."; return; }
+ if(!client || !client.connected){ voiceStatus.innerText="MQTT offline. Broker connect karke dobara try karein."; return; }
+ const state=on?"ON":"OFF";
+ let channel=-1;
+ if(/\b(all|sabhi|every|sagle|sagale|saare)\b/.test(text) || text.includes("sab relay")) channel=0;
+ else if(/spare 2|\b(r|relay|channel)\s*12\b/.test(text)) channel=12;
+ else if(/spare 1|\b(r|relay|channel)\s*11\b/.test(text)) channel=11;
+ else if((text.includes("master")&&text.includes("bath"))||/\b(r|relay|channel)\s*10\b/.test(text)) channel=10;
+ else if(text.includes("geyser")||text.includes("common bath")||/\b(r|relay|channel)\s*9\b/.test(text)) channel=9;
+ else if(text.includes("passage")||text.includes("corridor")||/\b(r|relay|channel)\s*8\b/.test(text)) channel=8;
+ else if((text.includes("child")&&text.includes("fan"))||/\b(r|relay|channel)\s*7\b/.test(text)) channel=7;
+ else if((text.includes("child")&&/(socket|lamp|light)/.test(text))||/\b(r|relay|channel)\s*6\b/.test(text)) channel=6;
+ else if(text.includes("master bedroom")||text.includes("master bed")||/\b(r|relay|channel)\s*5\b/.test(text)) channel=5;
+ else if((text.includes("living")&&text.includes("fan"))||/\b(r|relay|channel)\s*4\b/.test(text)) channel=4;
+ else if(text.includes("living")&&(/light 3|light three|\b(r|relay|channel)\s*3\b/.test(text))) channel=3;
+ else if(text.includes("living")&&(/light 2|light two|\b(r|relay|channel)\s*2\b/.test(text))) channel=2;
+ else if(text.includes("living")&&/(light|lamp)/.test(text)) channel=1;
+ else { for(let n=12;n>=1;n--) if(new RegExp("\\b(r|relay|channel)\\s*"+n+"\\b").test(text)){channel=n;break;} }
+ if(channel<0){ voiceStatus.innerText="Load samajh nahi aaya. Exact naam boliye, jaise living room fan ya geyser."; return; }
+ if(channel===0){ allRelay(state); voiceStatus.innerText="All 12 relays " + state + " command sent."; return; }
+ publishRelayCommand(channel-1,state).then(()=>voiceStatus.innerText=names[channel-1]+" "+state+" command sent.").catch(()=>voiceStatus.innerText="Command publish nahi hua; MQTT permissions check karein.");
+}
 
 function box(i){
  let div=document.createElement("div");
