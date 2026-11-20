@@ -83,16 +83,24 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 <div class="card"><h2>Living Room</h2><div id="living"></div></div>
 <div class="card"><h2>Master Bedroom / Child Room</h2><div id="kitchen"></div></div>
 <div class="card"><h2>Passage / Bathrooms / Spare</h2><div id="bath"></div></div>
-<div class="card">
+<div class="card" id="camera">
 <h2>Camera</h2>
 <div class="cameraBox">
-<input id="camUrl" value="http://192.168.1.6:81/stream">
+<input id="camUrl" value="http://192.168.1.13:81/stream">
 <button class="blue" onclick="loadCamera()">LOAD</button>
 <button class="blue" onclick="openCamera()">OPEN</button>
 <button class="off" onclick="stopCamera()">STOP</button>
+<button class="on" onclick="setCameraFlash(true)">FLASH ON</button>
+<button class="off" onclick="setCameraFlash(false)">FLASH OFF</button>
+<button class="on" onclick="startCameraRecording()">START REC</button>
+<button class="off" onclick="stopCameraRecording()">STOP REC</button>
+<select id="recordingFiles" aria-label="Saved camera recordings"><option value="">Load recordings</option></select>
+<button class="blue" onclick="refreshRecordings()">FILES</button>
+<button class="blue" onclick="downloadRecording()">DOWNLOAD AVI</button>
 </div>
 <img id="camView" class="cameraFrame" alt="ESP32-CAM stream">
 <p class="hint" id="camStatus">If stream is blocked on GitHub HTTPS, press OPEN.</p>
+<p class="hint" id="recordStatus">microSD recording status: checking camera...</p>
 </div>
 
 <div class="card">
@@ -115,7 +123,7 @@ button{border:0;border-radius:20px;padding:8px 16px;color:white;font-weight:bold
 
 <div class="card">
 <h2>Camera / Network</h2>
-<div class="note">Camera IP: <b>192.168.1.6</b><br>Stream: <b>:81/stream</b></div>
+<div class="note">Camera IP: <b>192.168.1.13</b><br>Stream: <b>:81/stream</b></div>
 <div class="note">GitHub HTTPS may block inline local camera preview. OPEN button is best for camera.</div>
 </div>
 
@@ -163,7 +171,7 @@ const configuredRelayIndexes = new Set(Array.from({length: 12}, (_, i) => i));
 
 let states = {};
 let client;
-const DEFAULT_CAMERA_URL = "http://192.168.1.6:81/stream";
+const DEFAULT_CAMERA_URL = "http://192.168.1.13:81/stream";
 const LOCAL_CONTROLLER_URL = "http://192.168.1.6/";
 let savedCamUrl = localStorage.getItem("hajareCamUrl");
 
@@ -360,8 +368,7 @@ function getInitialCameraUrl(){
 
  try {
    let parsed = new URL(savedCamUrl);
-   if(parsed.hostname === "10.225.218.158") return DEFAULT_CAMERA_URL;
-   if(parsed.hostname === "192.168.1.9") return DEFAULT_CAMERA_URL;
+   if(parsed.hostname === "10.225.218.158" || ["192.168.1.6", "192.168.1.7", "192.168.1.9"].includes(parsed.hostname)) return DEFAULT_CAMERA_URL;
    return savedCamUrl;
  } catch(e) {
    return DEFAULT_CAMERA_URL;
@@ -395,6 +402,91 @@ function openLocalController(){
 function stopCamera(){
  camView.removeAttribute("src");
  camStatus.innerText = "Camera stopped.";
+}
+
+async function setCameraFlash(on){
+ try {
+  const camera = new URL(getCameraUrl());
+ const response = await fetch(`http://${camera.hostname}/flash?state=${on ? "on" : "off"}`, {cache:"no-store"});
+  const result = await response.text();
+  camStatus.innerText = response.ok ? `Camera flash ${on ? "ON" : "OFF"}. ${result}` : `Flash command failed (${response.status}).`;
+ } catch(e) {
+  camStatus.innerText = "Flash command failed. Check that the camera is online on this Wi-Fi.";
+ }
+}
+
+function cameraApiBase(){
+ const camera = new URL(getCameraUrl());
+ const port = camera.port && camera.port !== "81" ? `:${camera.port}` : "";
+ return `${camera.protocol}//${camera.hostname}${port}`;
+}
+
+async function cameraApi(path){
+ const response = await fetch(`${cameraApiBase()}${path}`, {cache:"no-store"});
+ const data = await response.json();
+ if(!response.ok || data.ok === false) throw new Error(data.error || `Camera returned ${response.status}`);
+ return data;
+}
+
+async function refreshRecordingStatus(){
+ try {
+  const state = await cameraApi("/record/status");
+  const label = state.stopping ? "Saving AVI..." : state.recording ? `RECORDING ${state.file} · ${state.frames} frames` : `Not recording · ${state.message}`;
+  recordStatus.innerText = `microSD: ${label}`;
+ } catch(e) {
+  recordStatus.innerText = "microSD recording status unavailable. Check camera Wi-Fi/IP.";
+ }
+}
+
+async function startCameraRecording(){
+ try {
+  const result = await cameraApi("/record/start");
+  recordStatus.innerText = result.message || "Recording started.";
+  refreshRecordingStatus();
+ } catch(e) {
+  recordStatus.innerText = `Start failed: ${e.message}`;
+ }
+}
+
+async function stopCameraRecording(){
+ try {
+  const result = await cameraApi("/record/stop");
+  recordStatus.innerText = result.message || "Saving recording...";
+  refreshRecordingStatus();
+ } catch(e) {
+  recordStatus.innerText = `Stop failed: ${e.message}`;
+ }
+}
+
+async function refreshRecordings(){
+ try {
+  const result = await cameraApi("/record/list");
+  recordingFiles.replaceChildren();
+  for(const item of result.files){
+   const option = document.createElement("option");
+   option.value = item.name;
+   option.textContent = `${item.name} · ${(item.bytes / 1048576).toFixed(1)} MB`;
+   recordingFiles.appendChild(option);
+  }
+  if(!result.files.length){
+   const option = document.createElement("option");
+   option.value = "";
+   option.textContent = "No recordings on microSD";
+   recordingFiles.appendChild(option);
+  }
+  recordStatus.innerText = `${result.files.length} AVI recording(s) on microSD.`;
+ } catch(e) {
+  recordStatus.innerText = `Could not read recordings: ${e.message}`;
+ }
+}
+
+function downloadRecording(){
+ const name = recordingFiles.value;
+ if(!name){
+  recordStatus.innerText = "Press FILES and select a saved AVI first.";
+  return;
+ }
+ window.open(`${cameraApiBase()}/record/download?file=${encodeURIComponent(name)}`, "_blank");
 }
 
 function connectMQTT(){
@@ -485,6 +577,9 @@ function forgetMQTT(){
 }
 
 build();
+if(location.hash === "#camera") loadCamera();
+refreshRecordingStatus();
+setInterval(refreshRecordingStatus, 4000);
 </script>
 
 </body>
